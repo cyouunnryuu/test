@@ -1,0 +1,670 @@
+#include "iodefine.h"
+#include "vect.h"
+
+#define LED_PORT PORT1.PODR.BIT.B5
+#define DELAY_VALUE  50000
+
+#pragma address (VRCR_BYTE=0x00080200)           //VRCR
+char VRCR_BYTE;
+unsigned short addata=0;
+unsigned int time=0;
+int b=0;//拞抐偺拞偱敪憲偟偨夞悢
+int t2=0;//僨僕僞儖僠儏乕僽偺敪憲偟偨夞悢
+int t;//栚壓SPI偱偳偺僨僕僞儖僠儏乕僽偵敪憲偟偨僼儔僌
+
+unsigned long QIANWAN;
+unsigned long BAIWAN;
+unsigned long SHIWAN;
+unsigned long WAN;
+unsigned long QIAN;
+unsigned long BAI;
+unsigned long SHI;
+unsigned long GE;
+
+
+int tem=0;
+long tem2=0;
+
+char TX_BUFF[9]={'0','.','0','0','0','V','\n','\r','\0'};
+char *ptr_tx = TX_BUFF;
+int m=0;
+char ge = 0;
+char shi = 0;
+char bai = 0;
+char qian = 0;
+
+
+/*丂娭悢偺僾儘僩僞僀僾愰尵丂*/
+
+void PORT_INITIALIZE(void);
+void change_oscillation_Main_Clock(); 
+void Intial_TIMER_MTU0();
+void Intial_SPI();
+void Digital_tube_drive();
+void ADinit(void);
+void Intial_SCI1_Serial_Interface();
+long Digital_tube_Decimal_to_hexadecimal_number(long value);
+/*僨僕僞儖僠儏乕僽愝抲 //LSB=PABCDEFG  {0,1,2,3,4,5,6,7,8,9,*}={0x81,0xcf,0x92,0x86,0xcc,0xa4,0xa0,0x8f,0x80,0x84,0xff}丂*/
+/**************************************************************************************************************************
+***************************************************************************************************************************/
+
+
+/*丂儊僀儞娭悢丂*/
+void main(void)
+{	
+	
+	PORT_INITIALIZE();        			 		//慡億乕僩弌椡丂慡億乕僩俴俷倂
+	change_oscillation_Main_Clock();					//set mainclock_20MHZ
+	Intial_TIMER_MTU0();
+	Intial_SPI();
+	ADinit();
+	Intial_SCI1_Serial_Interface();
+	
+	
+	while(1)
+	{	
+		if(time>=100)
+		{ 
+				LED_PORT=~LED_PORT;
+			
+			S12AD.ADCSR.BIT.ADST = 1; 		//A/D曄姺嫋壜
+			while (0!= S12AD.ADCSR.BIT.ADST)
+   {
+        /* Confirm that the written value can be read correctly. */
+   }
+			addata=S12AD.ADDR0;//
+			tem = 5*1000*addata/4096;
+			ge=(char)((tem%10)+48);
+			shi=(char)((tem%100)/10+48);
+			bai=(char)((tem%1000)/100+48);
+			qian=(char)((tem/1000)+48);
+			TX_BUFF[0]=qian;
+			TX_BUFF[2]=bai;
+			TX_BUFF[3]=shi;
+			TX_BUFF[4]=ge;
+
+			
+			SCI1.SCR.BIT.TIE=1;
+			SCI1.SCR.BIT.TE=1;
+						
+			if((4500 < tem) && (tem < 6000)) 
+			  tem2=8;
+			else 
+			  tem2=0xff;
+			GE=Digital_tube_Decimal_to_hexadecimal_number(tem2);
+			if((3750 < tem) && (tem < 6000))
+			  tem2=7;
+			else 
+			  tem2=0xff;
+			SHI=Digital_tube_Decimal_to_hexadecimal_number(tem2);
+			if((3125 < tem) && (tem < 6000)) 
+			  tem2=6;
+			else 
+		      	  tem2=0xff;
+			BAI=Digital_tube_Decimal_to_hexadecimal_number(tem2);
+			if((2500 < tem) && (tem < 6000)) 
+			  tem2=5;
+			else 
+			  tem2=0xff;
+			QIAN=Digital_tube_Decimal_to_hexadecimal_number(tem2);
+			if((1875 < tem) && (tem < 6000))
+			  tem2=4;
+			else 
+			  tem2=0xff;
+			WAN=Digital_tube_Decimal_to_hexadecimal_number(tem2);
+			if((1250 < tem) && (tem < 6000))
+			  tem2=3;
+			else 
+			  tem2=0xff;
+			SHIWAN=Digital_tube_Decimal_to_hexadecimal_number(tem2);
+			if((625 < tem) && (tem < 6000))
+			  tem2=2;
+			else 
+			  tem2=0xff;
+			BAIWAN=Digital_tube_Decimal_to_hexadecimal_number(tem2);
+			if((70 < tem) && (tem < 6000))
+			  tem2=1;
+			else 
+			  tem2=0xff;
+			QIANWAN=Digital_tube_Decimal_to_hexadecimal_number(tem2);
+			
+			Digital_tube_drive();
+			time=0;
+			
+		}			
+	
+	}             
+	
+}
+		
+
+/*丂俬乛俷億乕僩弶婜壔娭悢丂*/
+void PORT_INITIALIZE(void)
+{
+	PORT0.PDR.BYTE = 0xFF;
+	PORT1.PDR.BYTE = 0xFF;
+	PORT2.PDR.BYTE = 0xFF;
+	PORT3.PDR.BYTE = 0x00;  //P37.P36丂僋儘僢僋20MHZ
+	PORT4.PDR.BYTE = 0xFF;
+	PORT5.PDR.BYTE = 0xFF;
+	PORTA.PDR.BYTE = 0xFF;
+	PORTB.PDR.BYTE = 0xFF;
+	PORTC.PDR.BYTE = 0xFF;
+	PORTD.PDR.BYTE = 0xFF;
+	PORTE.PDR.BYTE = 0xFF;
+	PORTH.PDR.BYTE = 0xFF;
+	PORTJ.PDR.BYTE = 0xFF;
+	
+	PORT0.PODR.BYTE = 0x00;
+	PORT1.PODR.BYTE = 0xFF;
+	PORT2.PODR.BYTE = 0x00;
+	PORT3.PODR.BYTE = 0x00;
+	PORT4.PODR.BYTE = 0x00;
+	PORT5.PODR.BYTE = 0x00;
+	PORTA.PODR.BYTE = 0x00;
+	PORTB.PODR.BYTE = 0x00;
+	PORTC.PODR.BYTE = 0x00;
+	PORTD.PODR.BYTE = 0x00;
+	PORTE.PODR.BYTE = 0x00;
+	PORTH.PODR.BYTE = 0x00;
+	PORTJ.PODR.BYTE = 0x00;
+}
+
+void change_oscillation_Main_Clock()
+{
+    unsigned int  i;
+	
+	SYSTEM.PRCR.WORD=0xA507;			//Protect 夝彍
+	
+	VRCR_BYTE=0x00;    					//VRCR幨0
+	
+	
+	SYSTEM.MOSCWTCR.BYTE=0x0F;  		//僋儕僢僋埨掕帪娫愝抲丄20MHZ  50ns*262144>10ms 
+		while (0x0F != SYSTEM.MOSCWTCR.BYTE)
+   {
+        /* Confirm that the written value can be read correctly. */
+   }
+ /*   SYSTEM.SCKCR.BIT.PCKD=0x4; /*PCKD16暘昿丂丂PCLK:ADCLK 暘昿斾1:2 PCLKB20MHZ丆ADCLK40MHZ
+								廃曈儌僕儏乕儖僋儘僢僋PCLK乮拲1乯偲A/D曄姺僋儘僢僋ADCLK乮拲1乯傪埲壓偺暘廃斾偱愝掕壜擻
+								PCLK丗ADCLK暘廃斾 = 1丗1丄1丗2丄1丗4丄1丗8丄2丗1丄4丗1    ADCLK偺愝掕偼僋儘僢僋敪惗夞楬偱峴偄傑偡
+								
+								廃曈儌僕儏乕儖僋儘僢僋PCLK偼SCKCR.PCKB[3:0]價僢僩偱愝掕偟偨廃攇悢丄A/D曄姺僋儘僢僋ADCLK偼
+								SCKCR.PCKD[3:0]價僢僩偱愝掕偟偨廃攇悢偵側傝傑偡丅*/
+	
+/*	SYSTEM.SCKCR.BIT.PCKB=0x2; //PCKB4暘昿 PCLK to ADCLK frequency division ratio = 1:4
+	
+	
+	while (0x0004!= SYSTEM.SCKCR.BIT.PCKD)
+   {
+        /* Confirm that the written value can be read correctly. */
+   //}
+	SYSTEM.MOFCR.BYTE=0x30;    	 	//Main Clock Oscillator Drive Capability Switch 20MHZ not lead type ceramic resonator Resonator
+	SYSTEM.MOSCCR.BYTE=0x00;       		//Main Clock摦嶌
+	while (0x00 != SYSTEM.MOSCCR.BYTE)
+   {
+        /* Confirm that the written value can be read correctly. */
+   }	
+	
+	for(i=0;i<50000;i++) {}    		    //Wait
+    SYSTEM.SCKCR3.WORD=0x0200;        			//Change system clock>>20MHZ
+	
+	while (0x0200 != SYSTEM.SCKCR3.WORD)
+   {
+        /* Confirm that the written value can be read correctly. */
+   }
+
+
+	SYSTEM.PRCR.WORD=0xA500;
+	
+}
+
+
+
+
+void Intial_TIMER_MTU0()
+{
+	
+	SYSTEM.PRCR.WORD=0xA502;			//Protect 夝彍
+	SYSTEM.MSTPCRA.BIT.MSTPA9=0;        //MSTPA9儅儖僠僼傽儞僋僔儑儞僞僀儅僷儖僗儐僯僢僩儌僕儏乕儖僗僩僢僾愝掕價僢僩
+	MTU0.TCR.BYTE=0x20;					//TGRA偺僐儞儁傾儅僢僠/僀儞僾僢僩僉儍僾僠儍偱TCNT僋儕傾
+	//MTU0.TGRA=0x1387;   				//5MHZ 1ms  T=(N+1)/PCLK
+	MTU0.TGRA=0x4E21;   				//1ms  T=PCLK/(N+1)
+	MTU0.TCNT=0x0000;					//MTU0僞僀儅僀僯僔儍儖
+	MTU0.TIER.BIT.TGIEA = 1;			//僞僀儅妱傝崬傒敪惗嫋壜
+	ICU.IPR[114].BIT.IPR = 2;			//妱傝崬傒儗儀儖愝掕
+	ICU.IER[0x0E].BIT.IEN2 = 1;			//妱傝崬傒梫媮嫋壜
+	while (1!= ICU.IER[0x0E].BIT.IEN2)
+   {
+        /* Confirm that the written value can be read correctly. */
+   }
+	MTU.TSTR.BIT.CST0 = 1;
+	SYSTEM.PRCR.WORD=0xA500;
+
+}
+
+
+void Intial_SPI()
+{
+	/*Intial_SPI*/
+	SYSTEM.PRCR.WORD=0xA502;			
+	//write Protect 夝彍
+    	SYSTEM.MSTPCRB.BIT.MSTPB17=0;		
+	//懳徾儌僕儏乕儖丗RSPI0
+        //0丗儌僕儏乕儖僗僩僢僾忬懺偺夝彍
+        //1丗儌僕儏乕儖僗僩僢僾忬懺傊慗堏
+   	while (0!= SYSTEM.MSTPCRB.BIT.MSTPB17)
+   {
+        /* Confirm that the written value can be read correctly. */
+   }
+	SYSTEM.PRCR.WORD=0xA500; //write Protect
+		
+	/***************************************************************/
+	
+	RSPI0.SPPCR.BYTE = 0x20; /////RSPI抂巕惂屼(SPPCR)
+	/*b0 SPLP RSPI儖乕僾僶僢僋價僢僩		0丗捠忢儌乕僪  1丗儖乕僾僶僢僋儌乕僪乮憲怣僨乕僞偺斀揮亖庴怣僨乕僞乯
+	丂b1 SPLP2 RSPI儖乕僾僶僢僋2價僢僩 		0丗捠忢儌乕僪  1丗儖乕僾僶僢僋儌乕僪乮憲怣僨乕僞亖庴怣僨乕僞乯
+    丂b3-b2  梊栺價僢僩撉傓偲乬0乭偑撉傔傑偡丅彂偔応崌丄乬0乭偲偟偰偔偩偝偄
+    丂b4 MOIFV MOSI傾僀僪儖屌掕抣價僢僩		0丗MOSI傾僀僪儖帪偺MOSIA抂巕偺弌椡抣偼Low         1丗MOSI傾僀僪儖帪偺MOSIA抂巕偺弌椡抣偼High
+	丂b5 MOIFE MOSI傾僀僪儖抣屌掕嫋壜價僢僩	0丗MOSI弌椡抣偼慜夞揮憲偺嵟廔僨乕僞		 		丂1丗MOSI弌椡抣偼MOIFV價僢僩偺愝掕抣
+	丂b7-b6  梊栺價僢僩撉傓偲乬0乭偑撉傔傑偡丅彂偔応崌丄乬0乭偲偟偰偔偩偝偄*/
+    	RSPI0.SPBR.BYTE = 1;
+	/*SPBR儗僕僗僞偺愝掕抣乮n乯BRDV[1:0]價僢僩偺愝掕抣乮N乯暘廃斾價僢僩儗乕僩PCLK亖20MHz
+		0 			 0 			 2 	 16.0 Mbps乮拲1乯
+		1			 0 			 4 	  8.00 Mbps	//8M埲壓偑昁梫両両
+		2			 0			 6 	  5.33 Mbps
+		3 			 0	 		 8 	  4.00 Mbps
+		4			 0 			10 	  3.20 Mbps丂丂
+		5 			 0 			12 	  2.67 Mbps
+		5 			 1 			24 	  1.33Mbps
+		5	  	 	 2 			48 	  667 kbps
+		5 			 3 			96 	  333 kbps
+	    255 		 3 		    4096  7.81 kbps*/
+	RSPI0.SPDCR.BYTE = 0x30; //1僼儗乕儉,SPDR儗僕僗僞傊偼儚乕僪傾僋僙僗_16BIT,SPDR偼敪怣僶僢僼傽傪撉傒弌偡.
+	   /*價僢僩		僔儞儃儖		價僢僩柤		婡擻
+	    b1-b0 SPFC[1:0] 僼儗乕儉悢愝掕價僢僩 				b1 b0
+										0 0丗1僼儗乕儉
+										0 1丗2僼儗乕儉
+										1 0丗3僼儗乕儉
+										1 1丗4僼儗乕儉
+
+	    b3-b2 ? 梊栺價僢僩撉傓偲乬0乭偑撉傔傑偡丅彂偔応崌丄乬0乭偲偟偰偔偩偝偄
+	    b4 SPRDTD RSPI庴怣/憲怣僨乕僞慖戰價僢僩
+										0丗SPDR偼庴怣僶僢僼傽傪撉傒弌偡
+										1丗SPDR偼憲怣僶僢僼傽傪撉傒弌偡乮偨偩偟丄憲怣僶僢僼傽偑嬻偺偲偒乯
+
+	    b5 SPLW RSPI儘儞僌儚乕僪傾僋僙僗/儚乕僪傾僋僙僗愝掕價僢僩
+										0丗SPDR儗僕僗僞傊偼儚乕僪傾僋僙僗
+										1丗SPDR儗僕僗僞傊偼儘儞僌儚乕僪傾僋僙僗
+
+	    b7-b6 ? 梊栺價僢僩撉傓偲乬0乭偑撉傔傑偡丅彂偔応崌丄乬0乭偲偟偰偔偩偝偄*/
+	
+	RSPI0.SPSCR.BYTE = 0x00; // 僔乕働儞僗挿1
+	/*b2 to b0 SPSLN[2:0] RSPI Sequence Length	Specification
+							b2 b0 Sequence Length Referenced SPCMD0 to SPCMD7 (No.)
+							0 0 0: 1 0仺0仺乧
+							0 0 1: 2 0仺1仺0仺乧
+							0 1 0: 3 0仺1仺2仺0仺乧
+							0 1 1: 4 0仺1仺2仺3仺0仺乧
+							1 0 0: 5 0仺1仺2仺3仺4仺0仺乧
+							1 0 1: 6 0仺1仺2仺3仺4仺5仺0仺乧
+							1 1 0: 7 0仺1仺2仺3仺4仺5仺6仺0仺乧
+							1 1 1: 8 0仺1仺2仺3仺4仺5仺6仺7仺0仺乧
+							SPCMD0 to SPCMD7 to be referenced and the order in which they
+							are referenced are changed according to the sequence length that is
+							set in these bits. The relationship among the setting of these bits,
+							sequence length, and SPCMD0 to SPCMD7 registers referenced by
+							the RSPI is shown above. However, the RSPI in slave mode always
+							references SPCMD0.
+							b7 to b3 ? Reserved These bits are read as 0. The write value should be 0.*/
+	
+	RSPI0.SPCKD.BYTE = 0x04; //RSPI Clock Delay Register  丂5RSPCK
+	RSPI0.SSLND.BYTE = 0x04; //SSL Negation Delay Setting  丂5RSPCK
+    	RSPI0.SPND.BYTE  = 0x04; //RSPI Next-Access Delay Setting      5RSPCK
+	RSPI0.SPCR2.BYTE = 0x00; //
+	/*b0 	SPPE	 僷儕僥傿嫋壜價僢僩		0丗憲怣僨乕僞僷儕僥傿價僢僩傪晅壛偟側偄庴怣僨乕僞偺僷儕僥傿僠僃僢僋傪峴傢側偄
+							1丗憲怣僨乕僞偵僷儕僥傿價僢僩傪晅壛偟丄庴怣僨乕僞偺僷儕僥傿僠僃僢僋傪峴偆乮SPCR.TXMD=0偺偲偒乯
+							丂 憲怣僨乕僞偵僷儕僥傿價僢僩傪晅壛偡傞偑丄庴怣僨乕僞偺僷儕僥傿僠僃僢僋偼峴傢側偄乮SPCR.TXMD=1偺偲偒乯
+
+	b1 丂丂SPOE 丂 僷儕僥傿儌乕僪價僢僩		0丗嬼悢僷儕僥傿偱憲庴怣	             1丗婏悢僷儕僥傿偱憲庴怣
+	b2     SPIIE   RSPI傾僀僪儖妱傝崬傒嫋壜價僢僩   0丗傾僀僪儖妱傝崬傒梫媮偺敪惗傪嬛巭  1丗傾僀僪儖妱傝崬傒梫媮偺敪惗傪嫋壜
+	b3     PTE     僷儕僥傿帺屓敾抐價僢僩	        0丗僷儕僥傿夞楬帺屓恌抐婡擻偼柍岠    1丗僷儕僥傿夞楬帺屓恌抐婡擻偑桳岠
+	b7-b4 ? 梊栺價僢僩撉傓偲乬0乭偑撉傔傑偡丅彂偔応崌丄乬0乭偲偟偰偔偩偝*/
+	RSPI0.SPCMD0.WORD = 0xf700; //data length 8  LSB first
+	RSPI0.SPCMD1.WORD = 0xf700; //
+	RSPI0.SPCMD2.WORD = 0xf700; //
+	RSPI0.SPCMD3.WORD = 0xf700; //
+	RSPI0.SPCMD4.WORD = 0xf700; //
+	RSPI0.SPCMD5.WORD = 0xf700; //
+	RSPI0.SPCMD6.WORD = 0xf700; //
+	RSPI0.SPCMD7.WORD = 0xf700; //
+	
+      /*Bit 		Symbol 				Bit Name   				Description 
+	b0 		CPHA 				RSPCK Phase Setting			0: Data sampling on odd edge, data variation on even edge
+															1: Data variation on odd edge, data sampling on even edge
+	b1 		CPOL 				RSPCK Polarity Setting 			0: RSPCK is low when idle
+											1: RSPCK is high when idle
+	b3, b2  	BRDV[1:0] 			Bit Rate Division Setting b3 b2
+															0 0: These bits select the base bit rate
+															0 1: These bits select the base bit rate divided by 2
+															1 0: These bits select the base bit rate divided by 4
+															1 1: These bits select the base bit rate divided by 8
+	b6 to b4 	SSLA[2:0] 			SSL Signal Assertion Setting b6 b4
+															0 0 0: SSL0
+															0 0 1: SSL1
+															0 1 0: SSL2
+															0 1 1: SSL3
+															1 x x: Setting prohibited
+															x: Don乫t care
+	b7 		SSLKP 				SSL Signal Level Keeping 	0: Negates all SSL signals upon completion of transfer
+										        1: Keeps the SSL signal level from the end of transfer until the beginning of the next access
+	b11 to b8 	SPB[3:0] 			RSPI Data Length Setting b11 b8
+																	0100 to 0111: 8 bits
+																	1 0 0 0: 9 bits
+																	1 0 0 1: 10 bits
+																	1 0 1 0: 11 bits
+																	1 0 1 1: 12 bits
+																	1 1 0 0: 13 bits
+																	1 1 0 1: 14 bits
+																	1 1 1 0: 15 bits
+																	1 1 1 1: 16 bits
+																	0 0 0 0: 20 bits
+																	0 0 0 1: 24 bits
+																	0010, 0011: 32 bits
+	b12		LSBF 					RSPI LSB First 					0: MSB first
+														1: LSB first
+	b13 		SPNDEN 				RSPI Next-Access Delay Enable
+											0: A next-access delay of 1 RSPCK + 2 PCLK
+											1: A next-access delay is equal to the setting of the RSPI nextaccess delay register (SPND)
+	b14 		SLNDEN 				SSL Negation Delay Setting Enable
+											0: An SSL negation delay of 1 RSPCK
+											1: An SSL negation delay is equal to the setting of the RSPI slave select negation delay register (SSLND)
+	b15 		SCKDEN 				RSPCK Delay Setting Enable 	0: An RSPCK delay of 1 RSPCK
+											1: An RSPCK delay is equal to the setting of the RSPI clock delay register (SPCKD)*/
+
+	ICU.IPR[44].BIT.IPR = 3;	//SPTI0妱傝崬傒儗儀儖愝掕
+	ICU.IER[0x05].BIT.IEN6 = 1;	//SPTI0妱傝崬傒梫媮嫋壜
+	
+	/*Intial_ SPI_IO  PA5=RSPCKA PA6=MOSIA*/
+	PORTA.PDR.BIT.B5   = 0;
+	PORTA.PDR.BIT.B6   = 0;
+	
+	PORTA.PMR.BIT.B5   = 0;	 //捠梡model
+	PORTA.PMR.BIT.B6   = 0;	 //捠梡model
+	
+	MPC.PWPR.BIT.B0WI  = 0;  //0彂偒崬傒嫋壜丂1彂偒崬傒嬛巭
+	MPC.PWPR.BIT.PFSWE = 1;  //0彂偒崬傒嬛巭丂1彂偒崬傒嫋壜
+   
+	MPC.PA5PFS.BYTE=0x0D;    //PSEL These bits select the peripheral function. For individual pin functions
+	MPC.PA6PFS.BYTE=0x0D;    //PSEL These bits select the peripheral function. For individual pin functions	
+    
+	while ( 0x0D!=MPC.PA6PFS.BYTE)
+   {
+        /* Confirm that the written value can be read correctly. */
+   }
+	
+	MPC.PWPR.BIT.PFSWE = 0;  //0彂偒崬傒嬛巭丂1彂偒崬傒嫋壜
+	MPC.PWPR.BIT.B0WI  = 1;  //0彂偒崬傒嫋壜丂1彂偒崬傒嬛巭
+
+	PORTA.PMR.BIT.B5   = 1;	 //Use pin as I/O port for peripheral functions RSPCKA
+	PORTA.PMR.BIT.B6   = 1;	 //Use pin as I/O port for peripheral functions MOSI
+	while ( 1!=PORTA.PMR.BIT.B6)
+   {
+        /* Confirm that the written value can be read correctly. */
+   }
+	
+
+	//RSPI0.SPCR.BYTE = 0x6B;    //敪憲拞抐嫋壜1摨堄丂  俼俽俹俬婲摦  01101011
+	//RSPI0.SPCR.BYTE = 0x2B;    //敪憲拞抐嫋壜1摨堄丂  俼俽俹俬婲摦偟側偄
+	RSPI0.SPCR.BYTE = 0x0B;    //敪憲拞抐嫋壜0晄摨堄丂  俼俽俹俬婲摦偟側偄
+	
+      /*Bit 		Symbol 		Bit Name 					Description 
+丂	b0 		SPMS 	丂丂丂RSPI Mode Select 					0: SPI operation (four-wire method)
+											1: Clock synchronous operation (three-wire method)
+	b1 		TXMD 	丂Communications Operating Mode丂Select			0: Full-duplex synchronous serial communications
+											1: Serial communications consisting of only transmit operations
+	b2 	丂	MODFEN 	丂Mode Fault Error Detection Enable 			0: Disables the detection of mode fault error
+											1: Enables the detection of mode fault error
+	b3 		MSTR 丂丂丂 RSPI Master/Slave Mode Select 			0: Slave mode
+											1: Master mode
+	b4 		SPEIE 	丂丂RSPI Error Interrupt Enable			丂丂丂  0: Disables the generation of RSPI error interrupt requests
+											1: Enables the generation of RSPI error interrupt requests
+	b5 	        SPTIE       RSPI Transmit Interrupt Enable 			0: Disables the generation of RSPI transmit interrupt requests
+											1: Enables the generation of RSPI transmit interrupt requests
+	b6 		SPE         RSPI Function Enable 				0: Disables the RSPI function
+											1: Enables the RSPI function
+	b7 		SPRIE       RSPI Receive Interrupt Enable 			0: Disables the generation of RSPI receive interrupt requests
+											1: Enables the generation of RSPI receive interrupt requests*/
+	RSPI0.SPCR.BYTE;
+	
+       RSPI0.SPCR.BIT.SPE = 1;//摦嶌奐巒
+	while ( 1!=RSPI0.SPCR.BIT.SPE)
+  {
+        
+   }
+
+
+}
+
+void Digital_tube_drive()
+{
+	switch(1)
+			{
+			 case 1:	RSPI0.SPDR.LONG=GE;
+					RSPI0.SPSR.BYTE;
+					while (0!=RSPI0.SPSR.BIT.IDLNF) ;
+					
+					
+			
+			 case 2:
+					RSPI0.SPDR.LONG=SHI;
+					RSPI0.SPSR.BYTE;
+					while (0!=RSPI0.SPSR.BIT.IDLNF) ;
+					
+					
+			 case 3:
+					
+					RSPI0.SPDR.LONG=BAI;
+					RSPI0.SPSR.BYTE;
+					while (0!=RSPI0.SPSR.BIT.IDLNF) ;
+					
+					
+			 case 4:
+					
+					RSPI0.SPDR.LONG=QIAN;
+					RSPI0.SPSR.BYTE;
+					while (0!=RSPI0.SPSR.BIT.IDLNF) ;
+					
+					
+			 case 5:
+					
+					RSPI0.SPDR.LONG=WAN;
+					RSPI0.SPSR.BYTE;
+					while (0!=RSPI0.SPSR.BIT.IDLNF) ;
+					
+					
+			 case 6:
+					
+					RSPI0.SPDR.LONG=SHIWAN;
+					RSPI0.SPSR.BYTE;
+					while (0!=RSPI0.SPSR.BIT.IDLNF) ;
+					
+					
+			 case 7:
+					
+					RSPI0.SPDR.LONG=BAIWAN;
+					RSPI0.SPSR.BYTE;
+					while (0!=RSPI0.SPSR.BIT.IDLNF) ;
+					
+					
+			 case 8:
+					
+					RSPI0.SPDR.LONG=QIANWAN;
+					RSPI0.SPSR.BYTE;
+					while (0!=RSPI0.SPSR.BIT.IDLNF) ;
+					break;
+			}
+
+}
+
+void ADinit(void)
+{	
+SYSTEM.PRCR.WORD=0xa502;		//儗僕僗僞僾儘僥僋僩夝彍
+MSTP(S12AD)=0;					//12bitAD儌僕儏乕儖僗僩僢僾夝彍
+SYSTEM.PRCR.WORD=0xa500;		//僾儘僥僋僩愝掕
+//*****************************initial port********************************
+//*************************************************************************
+PORT4.PDR.BIT.B0   = 0;	//捠梡 抂巕
+PORT4.PMR.BIT.B0   = 0;	//捠梡抂巕
+	
+MPC.PWPR.BIT.B0WI  = 0;  //0彂偒崬傒嫋壜丂1彂偒崬傒嬛巭
+MPC.PWPR.BIT.PFSWE = 1;  //0彂偒崬傒嬛巭丂1彂偒崬傒嫋壜
+MPC.P40PFS.BIT.ASEL = 1; //P40傾僫儘僌抂巕乮AN000乯偱巊梡
+   
+
+while ( 1!=MPC.P40PFS.BIT.ASEL)
+{
+   /* Confirm that the written value can be read correctly. */
+}
+	
+MPC.PWPR.BIT.PFSWE = 0;  //0彂偒崬傒嬛巭丂1彂偒崬傒嫋壜
+MPC.PWPR.BIT.B0WI  = 1;  //0彂偒崬傒嫋壜丂1彂偒崬傒嬛巭
+
+PORT4.PMR.BIT.B0 = 1;//P40廃曈婡擻抂巕
+//**************************************************************************
+S12AD.ADANSA.BIT.ANSA0 = 1;		//AN000慖戰
+S12AD.ADCSR.WORD = 0x0000;		//妱傝崬傒嫋壜丄僩儕偑婲摦嬛巭丄僔儞僌儖僗僉儍儞
+//IPR(S12AD,S12ADI0) = 15;		//妱傝崬傒儗儀儖愝掕
+//IEN(S12AD,S12ADI0) = 1;			//妱傝崬傒嫋壜
+//S12AD.ADCSR.BIT.ADST = 1; 		//A/D曄姺嫋壜
+}
+
+long Digital_tube_Decimal_to_hexadecimal_number(long value )
+{
+	 long value_return;
+		
+	switch(value)
+			{
+			 case 0:	value_return= 0x81;
+					break;
+					
+			
+			 case 1:
+					value_return= 0xcf;
+					break;
+					
+					
+			 case 2:
+					
+					value_return= 0x92;
+					break;
+					
+					
+			 case 3:
+					
+					value_return= 0x86;
+					break;
+					
+					
+			 case 4:
+					
+					value_return= 0xcc;
+					break;
+					
+					
+			 case 5:
+					
+					value_return= 0xa4;
+					break;
+					
+					
+			 case 6:
+					
+					value_return= 0xa0;
+					break;
+					
+					
+			 case 7:
+					
+					value_return= 0x8f;
+					break;
+					
+			 case 8:
+					
+					value_return= 0x80;
+					break;
+					
+			 case 9:
+					
+					value_return= 0x84;
+					break;
+			 default:
+			 		value_return= 0xff;
+					break;
+			}
+			return value_return;	
+	
+}
+void Intial_SCI1_Serial_Interface()
+{
+	
+	SYSTEM.PRCR.WORD=0xA502;
+	SYSTEM.MSTPCRB.BIT.MSTPB30=0;      //SCI1儌僕儏乕儖丂傾僋僥傿僽偵偡傞
+	while (0!= SYSTEM.MSTPCRB.BIT.MSTPB30)
+   {
+        /* Confirm that the written value can be read correctly. */
+   }
+    SYSTEM.PRCR.WORD=0xA500;
+	
+	SCI1.SCR.BIT.TIE=0;		//Writable only when TE in SCR = 0 
+	SCI1.SCR.BIT.RIE=0;		//and RE in SCR = 0 (both serial 
+	SCI1.SCR.BIT.TE =0;		//transmission and reception are 
+	SCI1.SCR.BIT.RE =0;		//disabled)
+	SCI1.SCR.BIT.TEIE=0;	
+		while (0!= SCI1.SCR.BIT.TEIE)
+   {
+        /* Confirm that the written value can be read correctly. */
+   }
+	
+	PORT2.PODR.BIT.B6 = 1;
+
+	PORT2.PDR.BIT.B6   = 1;	 //弌椡TXD1  
+	PORT3.PDR.BIT.B0   = 0;  //擖椡RXD1
+	
+	PORT2.PMR.BIT.B6   = 0;	 //捠梡model
+	PORT3.PMR.BIT.B0   = 0;	 //捠梡model
+		
+	MPC.PWPR.BIT.B0WI  = 0;  //0彂偒崬傒嫋壜丂1彂偒崬傒嬛巭
+	MPC.PWPR.BIT.PFSWE = 1;  //0彂偒崬傒嬛巭丂1彂偒崬傒嫋壜
+	
+	MPC.P26PFS.BYTE=0x0A;    //PSEL These bits select the peripheral function. For individual pin functions
+	MPC.P30PFS.BYTE=0x0A;    //PSEL These bits select the peripheral function. For individual pin functions
+	
+	MPC.PWPR.BIT.PFSWE = 0;  //0彂偒崬傒嬛巭丂1彂偒崬傒嫋壜
+	MPC.PWPR.BIT.B0WI  = 1;  //0彂偒崬傒嫋壜丂1彂偒崬傒嬛巭
+	
+	PORT2.PMR.BIT.B6   = 1;	 //Use pin as I/O port for peripheral functions
+	PORT3.PMR.BIT.B0   = 1;	 //Use pin as I/O port for peripheral functions
+	
+	SCI1.SCR.BIT.CKE =0;
+	
+	SCI1.SMR.BYTE= 0x00;		
+	//Asynchronous mode
+	//Selects 8 bits as the data length
+	//Parity bit addition is not performed
+	//1 stop bit
+	//Multi-processor communications function is disabled
+	//PCLK clock (n = 0)
+	SCI1.SCMR.BYTE = 0xF2;
+	SCI1.BRR= 64;	//N=64  9600bps
+	//SCI1.BRR= 1;	//N=64  9600bps
+	
+	SCI1.SCR.BIT.TE =0;
+	SCI1.SCR.BIT.RE =1;
+	SCI1.SCR.BIT.TIE=0;  
+	SCI1.SCR.BIT.RIE=1;
+	SCI1.SCR.BIT.TEIE=0;
+	ICU.IPR[218].BIT.IPR=10;   //SCI1 interrupt level
+	ICU.IER[0x1B].BIT.IEN3=1;  //receive interrupt request enable
+	ICU.IER[0x1B].BIT.IEN4=1;  //transmit interrupt request enable
+	ICU.IER[0x1B].BIT.IEN5=1;  //TEIE interrupt request enable
+}
