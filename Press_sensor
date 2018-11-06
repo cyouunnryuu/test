@@ -8,9 +8,9 @@
 char VRCR_BYTE;
 unsigned short addata=0;
 unsigned int time=0;
-int b=0;//日本語
-int t2=0;//僨僕僞儖僠儏乕僽偺敪憲偟偨夞悢
-int t;//栚壓SPI偱偳偺僨僕僞儖僠儏乕僽偵敪憲偟偨僼儔僌
+int b=0;//中断の中で発送した回数
+int t2=0;//デジタルチューブの発送した回数
+int t;//目下SPIでどのデジタルチューブに発送したフラグ
 
 unsigned long QIANWAN;
 unsigned long BAIWAN;
@@ -34,7 +34,7 @@ char bai = 0;
 char qian = 0;
 
 
-/*丂娭悢偺僾儘僩僞僀僾愰尵丂*/
+/*　関数のプロトタイプ宣言　*/
 
 void PORT_INITIALIZE(void);
 void change_oscillation_Main_Clock(); 
@@ -44,16 +44,16 @@ void Digital_tube_drive();
 void ADinit(void);
 void Intial_SCI1_Serial_Interface();
 long Digital_tube_Decimal_to_hexadecimal_number(long value);
-/*僨僕僞儖僠儏乕僽愝抲 //LSB=PABCDEFG  {0,1,2,3,4,5,6,7,8,9,*}={0x81,0xcf,0x92,0x86,0xcc,0xa4,0xa0,0x8f,0x80,0x84,0xff}丂*/
+/*デジタルチューブ設置 //LSB=PABCDEFG  {0,1,2,3,4,5,6,7,8,9,*}={0x81,0xcf,0x92,0x86,0xcc,0xa4,0xa0,0x8f,0x80,0x84,0xff}　*/
 /**************************************************************************************************************************
 ***************************************************************************************************************************/
 
 
-/*丂儊僀儞娭悢丂*/
+/*　メイン関数　*/
 void main(void)
 {	
 	
-	PORT_INITIALIZE();        			 		//慡億乕僩弌椡丂慡億乕僩俴俷倂
+	PORT_INITIALIZE();        			 		//全ポート出力　全ポートＬＯＷ
 	change_oscillation_Main_Clock();					//set mainclock_20MHZ
 	Intial_TIMER_MTU0();
 	Intial_SPI();
@@ -67,7 +67,7 @@ void main(void)
 		{ 
 				LED_PORT=~LED_PORT;
 			
-			S12AD.ADCSR.BIT.ADST = 1; 		//A/D曄姺嫋壜
+			S12AD.ADCSR.BIT.ADST = 1; 		//A/D変換許可
 			while (0!= S12AD.ADCSR.BIT.ADST)
    {
         /* Confirm that the written value can be read correctly. */
@@ -138,13 +138,13 @@ void main(void)
 }
 		
 
-/*丂俬乛俷億乕僩弶婜壔娭悢丂*/
+/*　Ｉ／Ｏポート初期化関数　*/
 void PORT_INITIALIZE(void)
 {
 	PORT0.PDR.BYTE = 0xFF;
 	PORT1.PDR.BYTE = 0xFF;
 	PORT2.PDR.BYTE = 0xFF;
-	PORT3.PDR.BYTE = 0x00;  //P37.P36丂僋儘僢僋20MHZ
+	PORT3.PDR.BYTE = 0x00;  //P37.P36　クロック20MHZ
 	PORT4.PDR.BYTE = 0xFF;
 	PORT5.PDR.BYTE = 0xFF;
 	PORTA.PDR.BYTE = 0xFF;
@@ -174,24 +174,24 @@ void change_oscillation_Main_Clock()
 {
     unsigned int  i;
 	
-	SYSTEM.PRCR.WORD=0xA507;			//Protect 夝彍
+	SYSTEM.PRCR.WORD=0xA507;			//Protect 解除
 	
-	VRCR_BYTE=0x00;    					//VRCR幨0
+	VRCR_BYTE=0x00;    					//VRCR写0
 	
 	
-	SYSTEM.MOSCWTCR.BYTE=0x0F;  		//僋儕僢僋埨掕帪娫愝抲丄20MHZ  50ns*262144>10ms 
+	SYSTEM.MOSCWTCR.BYTE=0x0F;  		//クリック安定時間設置、20MHZ  50ns*262144>10ms 
 		while (0x0F != SYSTEM.MOSCWTCR.BYTE)
    {
         /* Confirm that the written value can be read correctly. */
    }
- /*   SYSTEM.SCKCR.BIT.PCKD=0x4; /*PCKD16暘昿丂丂PCLK:ADCLK 暘昿斾1:2 PCLKB20MHZ丆ADCLK40MHZ
-								廃曈儌僕儏乕儖僋儘僢僋PCLK乮拲1乯偲A/D曄姺僋儘僢僋ADCLK乮拲1乯傪埲壓偺暘廃斾偱愝掕壜擻
-								PCLK丗ADCLK暘廃斾 = 1丗1丄1丗2丄1丗4丄1丗8丄2丗1丄4丗1    ADCLK偺愝掕偼僋儘僢僋敪惗夞楬偱峴偄傑偡
+ /*   SYSTEM.SCKCR.BIT.PCKD=0x4; /*PCKD16分頻　　PCLK:ADCLK 分頻比1:2 PCLKB20MHZ，ADCLK40MHZ
+								周辺モジュールクロックPCLK（注1）とA/D変換クロックADCLK（注1）を以下の分周比で設定可能
+								PCLK：ADCLK分周比 = 1：1、1：2、1：4、1：8、2：1、4：1    ADCLKの設定はクロック発生回路で行います
 								
-								廃曈儌僕儏乕儖僋儘僢僋PCLK偼SCKCR.PCKB[3:0]價僢僩偱愝掕偟偨廃攇悢丄A/D曄姺僋儘僢僋ADCLK偼
-								SCKCR.PCKD[3:0]價僢僩偱愝掕偟偨廃攇悢偵側傝傑偡丅*/
+								周辺モジュールクロックPCLKはSCKCR.PCKB[3:0]ビットで設定した周波数、A/D変換クロックADCLKは
+								SCKCR.PCKD[3:0]ビットで設定した周波数になります。*/
 	
-/*	SYSTEM.SCKCR.BIT.PCKB=0x2; //PCKB4暘昿 PCLK to ADCLK frequency division ratio = 1:4
+/*	SYSTEM.SCKCR.BIT.PCKB=0x2; //PCKB4分頻 PCLK to ADCLK frequency division ratio = 1:4
 	
 	
 	while (0x0004!= SYSTEM.SCKCR.BIT.PCKD)
@@ -199,7 +199,7 @@ void change_oscillation_Main_Clock()
         /* Confirm that the written value can be read correctly. */
    //}
 	SYSTEM.MOFCR.BYTE=0x30;    	 	//Main Clock Oscillator Drive Capability Switch 20MHZ not lead type ceramic resonator Resonator
-	SYSTEM.MOSCCR.BYTE=0x00;       		//Main Clock摦嶌
+	SYSTEM.MOSCCR.BYTE=0x00;       		//Main Clock動作
 	while (0x00 != SYSTEM.MOSCCR.BYTE)
    {
         /* Confirm that the written value can be read correctly. */
@@ -224,15 +224,15 @@ void change_oscillation_Main_Clock()
 void Intial_TIMER_MTU0()
 {
 	
-	SYSTEM.PRCR.WORD=0xA502;			//Protect 夝彍
-	SYSTEM.MSTPCRA.BIT.MSTPA9=0;        //MSTPA9儅儖僠僼傽儞僋僔儑儞僞僀儅僷儖僗儐僯僢僩儌僕儏乕儖僗僩僢僾愝掕價僢僩
-	MTU0.TCR.BYTE=0x20;					//TGRA偺僐儞儁傾儅僢僠/僀儞僾僢僩僉儍僾僠儍偱TCNT僋儕傾
+	SYSTEM.PRCR.WORD=0xA502;			//Protect 解除
+	SYSTEM.MSTPCRA.BIT.MSTPA9=0;        //MSTPA9マルチファンクションタイマパルスユニットモジュールストップ設定ビット
+	MTU0.TCR.BYTE=0x20;					//TGRAのコンペアマッチ/インプットキャプチャでTCNTクリア
 	//MTU0.TGRA=0x1387;   				//5MHZ 1ms  T=(N+1)/PCLK
 	MTU0.TGRA=0x4E21;   				//1ms  T=PCLK/(N+1)
-	MTU0.TCNT=0x0000;					//MTU0僞僀儅僀僯僔儍儖
-	MTU0.TIER.BIT.TGIEA = 1;			//僞僀儅妱傝崬傒敪惗嫋壜
-	ICU.IPR[114].BIT.IPR = 2;			//妱傝崬傒儗儀儖愝掕
-	ICU.IER[0x0E].BIT.IEN2 = 1;			//妱傝崬傒梫媮嫋壜
+	MTU0.TCNT=0x0000;					//MTU0タイマイニシャル
+	MTU0.TIER.BIT.TGIEA = 1;			//タイマ割り込み発生許可
+	ICU.IPR[114].BIT.IPR = 2;			//割り込みレベル設定
+	ICU.IER[0x0E].BIT.IEN2 = 1;			//割り込み要求許可
 	while (1!= ICU.IER[0x0E].BIT.IEN2)
    {
         /* Confirm that the written value can be read correctly. */
@@ -247,11 +247,11 @@ void Intial_SPI()
 {
 	/*Intial_SPI*/
 	SYSTEM.PRCR.WORD=0xA502;			
-	//write Protect 夝彍
+	//write Protect 解除
     	SYSTEM.MSTPCRB.BIT.MSTPB17=0;		
-	//懳徾儌僕儏乕儖丗RSPI0
-        //0丗儌僕儏乕儖僗僩僢僾忬懺偺夝彍
-        //1丗儌僕儏乕儖僗僩僢僾忬懺傊慗堏
+	//対象モジュール：RSPI0
+        //0：モジュールストップ状態の解除
+        //1：モジュールストップ状態へ遷移
    	while (0!= SYSTEM.MSTPCRB.BIT.MSTPB17)
    {
         /* Confirm that the written value can be read correctly. */
@@ -260,55 +260,55 @@ void Intial_SPI()
 		
 	/***************************************************************/
 	
-	RSPI0.SPPCR.BYTE = 0x20; /////RSPI抂巕惂屼(SPPCR)
-	/*b0 SPLP RSPI儖乕僾僶僢僋價僢僩		0丗捠忢儌乕僪  1丗儖乕僾僶僢僋儌乕僪乮憲怣僨乕僞偺斀揮亖庴怣僨乕僞乯
-	丂b1 SPLP2 RSPI儖乕僾僶僢僋2價僢僩 		0丗捠忢儌乕僪  1丗儖乕僾僶僢僋儌乕僪乮憲怣僨乕僞亖庴怣僨乕僞乯
-    丂b3-b2  梊栺價僢僩撉傓偲乬0乭偑撉傔傑偡丅彂偔応崌丄乬0乭偲偟偰偔偩偝偄
-    丂b4 MOIFV MOSI傾僀僪儖屌掕抣價僢僩		0丗MOSI傾僀僪儖帪偺MOSIA抂巕偺弌椡抣偼Low         1丗MOSI傾僀僪儖帪偺MOSIA抂巕偺弌椡抣偼High
-	丂b5 MOIFE MOSI傾僀僪儖抣屌掕嫋壜價僢僩	0丗MOSI弌椡抣偼慜夞揮憲偺嵟廔僨乕僞		 		丂1丗MOSI弌椡抣偼MOIFV價僢僩偺愝掕抣
-	丂b7-b6  梊栺價僢僩撉傓偲乬0乭偑撉傔傑偡丅彂偔応崌丄乬0乭偲偟偰偔偩偝偄*/
+	RSPI0.SPPCR.BYTE = 0x20; /////RSPI端子制御(SPPCR)
+	/*b0 SPLP RSPIループバックビット		0：通常モード  1：ループバックモード（送信データの反転＝受信データ）
+	　b1 SPLP2 RSPIループバック2ビット 		0：通常モード  1：ループバックモード（送信データ＝受信データ）
+    　b3-b2  予約ビット読むと“0”が読めます。書く場合、“0”としてください
+    　b4 MOIFV MOSIアイドル固定値ビット		0：MOSIアイドル時のMOSIA端子の出力値はLow         1：MOSIアイドル時のMOSIA端子の出力値はHigh
+	　b5 MOIFE MOSIアイドル値固定許可ビット	0：MOSI出力値は前回転送の最終データ		 		　1：MOSI出力値はMOIFVビットの設定値
+	　b7-b6  予約ビット読むと“0”が読めます。書く場合、“0”としてください*/
     	RSPI0.SPBR.BYTE = 1;
-	/*SPBR儗僕僗僞偺愝掕抣乮n乯BRDV[1:0]價僢僩偺愝掕抣乮N乯暘廃斾價僢僩儗乕僩PCLK亖20MHz
-		0 			 0 			 2 	 16.0 Mbps乮拲1乯
-		1			 0 			 4 	  8.00 Mbps	//8M埲壓偑昁梫両両
+	/*SPBRレジスタの設定値（n）BRDV[1:0]ビットの設定値（N）分周比ビットレートPCLK＝20MHz
+		0 			 0 			 2 	 16.0 Mbps（注1）
+		1			 0 			 4 	  8.00 Mbps	//8M以下が必要！！
 		2			 0			 6 	  5.33 Mbps
 		3 			 0	 		 8 	  4.00 Mbps
-		4			 0 			10 	  3.20 Mbps丂丂
+		4			 0 			10 	  3.20 Mbps　　
 		5 			 0 			12 	  2.67 Mbps
 		5 			 1 			24 	  1.33Mbps
 		5	  	 	 2 			48 	  667 kbps
 		5 			 3 			96 	  333 kbps
 	    255 		 3 		    4096  7.81 kbps*/
-	RSPI0.SPDCR.BYTE = 0x30; //1僼儗乕儉,SPDR儗僕僗僞傊偼儚乕僪傾僋僙僗_16BIT,SPDR偼敪怣僶僢僼傽傪撉傒弌偡.
-	   /*價僢僩		僔儞儃儖		價僢僩柤		婡擻
-	    b1-b0 SPFC[1:0] 僼儗乕儉悢愝掕價僢僩 				b1 b0
-										0 0丗1僼儗乕儉
-										0 1丗2僼儗乕儉
-										1 0丗3僼儗乕儉
-										1 1丗4僼儗乕儉
+	RSPI0.SPDCR.BYTE = 0x30; //1フレーム,SPDRレジスタへはワードアクセス_16BIT,SPDRは発信バッファを読み出す.
+	   /*ビット		シンボル		ビット名		機能
+	    b1-b0 SPFC[1:0] フレーム数設定ビット 				b1 b0
+										0 0：1フレーム
+										0 1：2フレーム
+										1 0：3フレーム
+										1 1：4フレーム
 
-	    b3-b2 ? 梊栺價僢僩撉傓偲乬0乭偑撉傔傑偡丅彂偔応崌丄乬0乭偲偟偰偔偩偝偄
-	    b4 SPRDTD RSPI庴怣/憲怣僨乕僞慖戰價僢僩
-										0丗SPDR偼庴怣僶僢僼傽傪撉傒弌偡
-										1丗SPDR偼憲怣僶僢僼傽傪撉傒弌偡乮偨偩偟丄憲怣僶僢僼傽偑嬻偺偲偒乯
+	    b3-b2 ? 予約ビット読むと“0”が読めます。書く場合、“0”としてください
+	    b4 SPRDTD RSPI受信/送信データ選択ビット
+										0：SPDRは受信バッファを読み出す
+										1：SPDRは送信バッファを読み出す（ただし、送信バッファが空のとき）
 
-	    b5 SPLW RSPI儘儞僌儚乕僪傾僋僙僗/儚乕僪傾僋僙僗愝掕價僢僩
-										0丗SPDR儗僕僗僞傊偼儚乕僪傾僋僙僗
-										1丗SPDR儗僕僗僞傊偼儘儞僌儚乕僪傾僋僙僗
+	    b5 SPLW RSPIロングワードアクセス/ワードアクセス設定ビット
+										0：SPDRレジスタへはワードアクセス
+										1：SPDRレジスタへはロングワードアクセス
 
-	    b7-b6 ? 梊栺價僢僩撉傓偲乬0乭偑撉傔傑偡丅彂偔応崌丄乬0乭偲偟偰偔偩偝偄*/
+	    b7-b6 ? 予約ビット読むと“0”が読めます。書く場合、“0”としてください*/
 	
-	RSPI0.SPSCR.BYTE = 0x00; // 僔乕働儞僗挿1
+	RSPI0.SPSCR.BYTE = 0x00; // シーケンス長1
 	/*b2 to b0 SPSLN[2:0] RSPI Sequence Length	Specification
 							b2 b0 Sequence Length Referenced SPCMD0 to SPCMD7 (No.)
-							0 0 0: 1 0仺0仺乧
-							0 0 1: 2 0仺1仺0仺乧
-							0 1 0: 3 0仺1仺2仺0仺乧
-							0 1 1: 4 0仺1仺2仺3仺0仺乧
-							1 0 0: 5 0仺1仺2仺3仺4仺0仺乧
-							1 0 1: 6 0仺1仺2仺3仺4仺5仺0仺乧
-							1 1 0: 7 0仺1仺2仺3仺4仺5仺6仺0仺乧
-							1 1 1: 8 0仺1仺2仺3仺4仺5仺6仺7仺0仺乧
+							0 0 0: 1 0→0→…
+							0 0 1: 2 0→1→0→…
+							0 1 0: 3 0→1→2→0→…
+							0 1 1: 4 0→1→2→3→0→…
+							1 0 0: 5 0→1→2→3→4→0→…
+							1 0 1: 6 0→1→2→3→4→5→0→…
+							1 1 0: 7 0→1→2→3→4→5→6→0→…
+							1 1 1: 8 0→1→2→3→4→5→6→7→0→…
 							SPCMD0 to SPCMD7 to be referenced and the order in which they
 							are referenced are changed according to the sequence length that is
 							set in these bits. The relationship among the setting of these bits,
@@ -317,18 +317,18 @@ void Intial_SPI()
 							references SPCMD0.
 							b7 to b3 ? Reserved These bits are read as 0. The write value should be 0.*/
 	
-	RSPI0.SPCKD.BYTE = 0x04; //RSPI Clock Delay Register  丂5RSPCK
-	RSPI0.SSLND.BYTE = 0x04; //SSL Negation Delay Setting  丂5RSPCK
+	RSPI0.SPCKD.BYTE = 0x04; //RSPI Clock Delay Register  　5RSPCK
+	RSPI0.SSLND.BYTE = 0x04; //SSL Negation Delay Setting  　5RSPCK
     	RSPI0.SPND.BYTE  = 0x04; //RSPI Next-Access Delay Setting      5RSPCK
 	RSPI0.SPCR2.BYTE = 0x00; //
-	/*b0 	SPPE	 僷儕僥傿嫋壜價僢僩		0丗憲怣僨乕僞僷儕僥傿價僢僩傪晅壛偟側偄庴怣僨乕僞偺僷儕僥傿僠僃僢僋傪峴傢側偄
-							1丗憲怣僨乕僞偵僷儕僥傿價僢僩傪晅壛偟丄庴怣僨乕僞偺僷儕僥傿僠僃僢僋傪峴偆乮SPCR.TXMD=0偺偲偒乯
-							丂 憲怣僨乕僞偵僷儕僥傿價僢僩傪晅壛偡傞偑丄庴怣僨乕僞偺僷儕僥傿僠僃僢僋偼峴傢側偄乮SPCR.TXMD=1偺偲偒乯
+	/*b0 	SPPE	 パリティ許可ビット		0：送信データパリティビットを付加しない受信データのパリティチェックを行わない
+							1：送信データにパリティビットを付加し、受信データのパリティチェックを行う（SPCR.TXMD=0のとき）
+							　 送信データにパリティビットを付加するが、受信データのパリティチェックは行わない（SPCR.TXMD=1のとき）
 
-	b1 丂丂SPOE 丂 僷儕僥傿儌乕僪價僢僩		0丗嬼悢僷儕僥傿偱憲庴怣	             1丗婏悢僷儕僥傿偱憲庴怣
-	b2     SPIIE   RSPI傾僀僪儖妱傝崬傒嫋壜價僢僩   0丗傾僀僪儖妱傝崬傒梫媮偺敪惗傪嬛巭  1丗傾僀僪儖妱傝崬傒梫媮偺敪惗傪嫋壜
-	b3     PTE     僷儕僥傿帺屓敾抐價僢僩	        0丗僷儕僥傿夞楬帺屓恌抐婡擻偼柍岠    1丗僷儕僥傿夞楬帺屓恌抐婡擻偑桳岠
-	b7-b4 ? 梊栺價僢僩撉傓偲乬0乭偑撉傔傑偡丅彂偔応崌丄乬0乭偲偟偰偔偩偝*/
+	b1 　　SPOE 　 パリティモードビット		0：偶数パリティで送受信	             1：奇数パリティで送受信
+	b2     SPIIE   RSPIアイドル割り込み許可ビット   0：アイドル割り込み要求の発生を禁止  1：アイドル割り込み要求の発生を許可
+	b3     PTE     パリティ自己判断ビット	        0：パリティ回路自己診断機能は無効    1：パリティ回路自己診断機能が有効
+	b7-b4 ? 予約ビット読むと“0”が読めます。書く場合、“0”としてくださ*/
 	RSPI0.SPCMD0.WORD = 0xf700; //data length 8  LSB first
 	RSPI0.SPCMD1.WORD = 0xf700; //
 	RSPI0.SPCMD2.WORD = 0xf700; //
@@ -354,7 +354,7 @@ void Intial_SPI()
 															0 1 0: SSL2
 															0 1 1: SSL3
 															1 x x: Setting prohibited
-															x: Don乫t care
+															x: Don’t care
 	b7 		SSLKP 				SSL Signal Level Keeping 	0: Negates all SSL signals upon completion of transfer
 										        1: Keeps the SSL signal level from the end of transfer until the beginning of the next access
 	b11 to b8 	SPB[3:0] 			RSPI Data Length Setting b11 b8
@@ -381,18 +381,18 @@ void Intial_SPI()
 	b15 		SCKDEN 				RSPCK Delay Setting Enable 	0: An RSPCK delay of 1 RSPCK
 											1: An RSPCK delay is equal to the setting of the RSPI clock delay register (SPCKD)*/
 
-	ICU.IPR[44].BIT.IPR = 3;	//SPTI0妱傝崬傒儗儀儖愝掕
-	ICU.IER[0x05].BIT.IEN6 = 1;	//SPTI0妱傝崬傒梫媮嫋壜
+	ICU.IPR[44].BIT.IPR = 3;	//SPTI0割り込みレベル設定
+	ICU.IER[0x05].BIT.IEN6 = 1;	//SPTI0割り込み要求許可
 	
 	/*Intial_ SPI_IO  PA5=RSPCKA PA6=MOSIA*/
 	PORTA.PDR.BIT.B5   = 0;
 	PORTA.PDR.BIT.B6   = 0;
 	
-	PORTA.PMR.BIT.B5   = 0;	 //捠梡model
-	PORTA.PMR.BIT.B6   = 0;	 //捠梡model
+	PORTA.PMR.BIT.B5   = 0;	 //通用model
+	PORTA.PMR.BIT.B6   = 0;	 //通用model
 	
-	MPC.PWPR.BIT.B0WI  = 0;  //0彂偒崬傒嫋壜丂1彂偒崬傒嬛巭
-	MPC.PWPR.BIT.PFSWE = 1;  //0彂偒崬傒嬛巭丂1彂偒崬傒嫋壜
+	MPC.PWPR.BIT.B0WI  = 0;  //0書き込み許可　1書き込み禁止
+	MPC.PWPR.BIT.PFSWE = 1;  //0書き込み禁止　1書き込み許可
    
 	MPC.PA5PFS.BYTE=0x0D;    //PSEL These bits select the peripheral function. For individual pin functions
 	MPC.PA6PFS.BYTE=0x0D;    //PSEL These bits select the peripheral function. For individual pin functions	
@@ -402,8 +402,8 @@ void Intial_SPI()
         /* Confirm that the written value can be read correctly. */
    }
 	
-	MPC.PWPR.BIT.PFSWE = 0;  //0彂偒崬傒嬛巭丂1彂偒崬傒嫋壜
-	MPC.PWPR.BIT.B0WI  = 1;  //0彂偒崬傒嫋壜丂1彂偒崬傒嬛巭
+	MPC.PWPR.BIT.PFSWE = 0;  //0書き込み禁止　1書き込み許可
+	MPC.PWPR.BIT.B0WI  = 1;  //0書き込み許可　1書き込み禁止
 
 	PORTA.PMR.BIT.B5   = 1;	 //Use pin as I/O port for peripheral functions RSPCKA
 	PORTA.PMR.BIT.B6   = 1;	 //Use pin as I/O port for peripheral functions MOSI
@@ -413,20 +413,20 @@ void Intial_SPI()
    }
 	
 
-	//RSPI0.SPCR.BYTE = 0x6B;    //敪憲拞抐嫋壜1摨堄丂  俼俽俹俬婲摦  01101011
-	//RSPI0.SPCR.BYTE = 0x2B;    //敪憲拞抐嫋壜1摨堄丂  俼俽俹俬婲摦偟側偄
-	RSPI0.SPCR.BYTE = 0x0B;    //敪憲拞抐嫋壜0晄摨堄丂  俼俽俹俬婲摦偟側偄
+	//RSPI0.SPCR.BYTE = 0x6B;    //発送中断許可1同意　  ＲＳＰＩ起動  01101011
+	//RSPI0.SPCR.BYTE = 0x2B;    //発送中断許可1同意　  ＲＳＰＩ起動しない
+	RSPI0.SPCR.BYTE = 0x0B;    //発送中断許可0不同意　  ＲＳＰＩ起動しない
 	
       /*Bit 		Symbol 		Bit Name 					Description 
-丂	b0 		SPMS 	丂丂丂RSPI Mode Select 					0: SPI operation (four-wire method)
+　	b0 		SPMS 	　　　RSPI Mode Select 					0: SPI operation (four-wire method)
 											1: Clock synchronous operation (three-wire method)
-	b1 		TXMD 	丂Communications Operating Mode丂Select			0: Full-duplex synchronous serial communications
+	b1 		TXMD 	　Communications Operating Mode　Select			0: Full-duplex synchronous serial communications
 											1: Serial communications consisting of only transmit operations
-	b2 	丂	MODFEN 	丂Mode Fault Error Detection Enable 			0: Disables the detection of mode fault error
+	b2 	　	MODFEN 	　Mode Fault Error Detection Enable 			0: Disables the detection of mode fault error
 											1: Enables the detection of mode fault error
-	b3 		MSTR 丂丂丂 RSPI Master/Slave Mode Select 			0: Slave mode
+	b3 		MSTR 　　　 RSPI Master/Slave Mode Select 			0: Slave mode
 											1: Master mode
-	b4 		SPEIE 	丂丂RSPI Error Interrupt Enable			丂丂丂  0: Disables the generation of RSPI error interrupt requests
+	b4 		SPEIE 	　　RSPI Error Interrupt Enable			　　　  0: Disables the generation of RSPI error interrupt requests
 											1: Enables the generation of RSPI error interrupt requests
 	b5 	        SPTIE       RSPI Transmit Interrupt Enable 			0: Disables the generation of RSPI transmit interrupt requests
 											1: Enables the generation of RSPI transmit interrupt requests
@@ -436,7 +436,7 @@ void Intial_SPI()
 											1: Enables the generation of RSPI receive interrupt requests*/
 	RSPI0.SPCR.BYTE;
 	
-       RSPI0.SPCR.BIT.SPE = 1;//摦嶌奐巒
+       RSPI0.SPCR.BIT.SPE = 1;//動作開始
 	while ( 1!=RSPI0.SPCR.BIT.SPE)
   {
         
@@ -508,17 +508,17 @@ void Digital_tube_drive()
 
 void ADinit(void)
 {	
-SYSTEM.PRCR.WORD=0xa502;		//儗僕僗僞僾儘僥僋僩夝彍
-MSTP(S12AD)=0;					//12bitAD儌僕儏乕儖僗僩僢僾夝彍
-SYSTEM.PRCR.WORD=0xa500;		//僾儘僥僋僩愝掕
+SYSTEM.PRCR.WORD=0xa502;		//レジスタプロテクト解除
+MSTP(S12AD)=0;					//12bitADモジュールストップ解除
+SYSTEM.PRCR.WORD=0xa500;		//プロテクト設定
 //*****************************initial port********************************
 //*************************************************************************
-PORT4.PDR.BIT.B0   = 0;	//捠梡 抂巕
-PORT4.PMR.BIT.B0   = 0;	//捠梡抂巕
+PORT4.PDR.BIT.B0   = 0;	//通用 端子
+PORT4.PMR.BIT.B0   = 0;	//通用端子
 	
-MPC.PWPR.BIT.B0WI  = 0;  //0彂偒崬傒嫋壜丂1彂偒崬傒嬛巭
-MPC.PWPR.BIT.PFSWE = 1;  //0彂偒崬傒嬛巭丂1彂偒崬傒嫋壜
-MPC.P40PFS.BIT.ASEL = 1; //P40傾僫儘僌抂巕乮AN000乯偱巊梡
+MPC.PWPR.BIT.B0WI  = 0;  //0書き込み許可　1書き込み禁止
+MPC.PWPR.BIT.PFSWE = 1;  //0書き込み禁止　1書き込み許可
+MPC.P40PFS.BIT.ASEL = 1; //P40アナログ端子（AN000）で使用
    
 
 while ( 1!=MPC.P40PFS.BIT.ASEL)
@@ -526,16 +526,16 @@ while ( 1!=MPC.P40PFS.BIT.ASEL)
    /* Confirm that the written value can be read correctly. */
 }
 	
-MPC.PWPR.BIT.PFSWE = 0;  //0彂偒崬傒嬛巭丂1彂偒崬傒嫋壜
-MPC.PWPR.BIT.B0WI  = 1;  //0彂偒崬傒嫋壜丂1彂偒崬傒嬛巭
+MPC.PWPR.BIT.PFSWE = 0;  //0書き込み禁止　1書き込み許可
+MPC.PWPR.BIT.B0WI  = 1;  //0書き込み許可　1書き込み禁止
 
-PORT4.PMR.BIT.B0 = 1;//P40廃曈婡擻抂巕
+PORT4.PMR.BIT.B0 = 1;//P40周辺機能端子
 //**************************************************************************
-S12AD.ADANSA.BIT.ANSA0 = 1;		//AN000慖戰
-S12AD.ADCSR.WORD = 0x0000;		//妱傝崬傒嫋壜丄僩儕偑婲摦嬛巭丄僔儞僌儖僗僉儍儞
-//IPR(S12AD,S12ADI0) = 15;		//妱傝崬傒儗儀儖愝掕
-//IEN(S12AD,S12ADI0) = 1;			//妱傝崬傒嫋壜
-//S12AD.ADCSR.BIT.ADST = 1; 		//A/D曄姺嫋壜
+S12AD.ADANSA.BIT.ANSA0 = 1;		//AN000選択
+S12AD.ADCSR.WORD = 0x0000;		//割り込み許可、トリが起動禁止、シングルスキャン
+//IPR(S12AD,S12ADI0) = 15;		//割り込みレベル設定
+//IEN(S12AD,S12ADI0) = 1;			//割り込み許可
+//S12AD.ADCSR.BIT.ADST = 1; 		//A/D変換許可
 }
 
 long Digital_tube_Decimal_to_hexadecimal_number(long value )
@@ -608,7 +608,7 @@ void Intial_SCI1_Serial_Interface()
 {
 	
 	SYSTEM.PRCR.WORD=0xA502;
-	SYSTEM.MSTPCRB.BIT.MSTPB30=0;      //SCI1儌僕儏乕儖丂傾僋僥傿僽偵偡傞
+	SYSTEM.MSTPCRB.BIT.MSTPB30=0;      //SCI1モジュール　アクティブにする
 	while (0!= SYSTEM.MSTPCRB.BIT.MSTPB30)
    {
         /* Confirm that the written value can be read correctly. */
@@ -627,20 +627,20 @@ void Intial_SCI1_Serial_Interface()
 	
 	PORT2.PODR.BIT.B6 = 1;
 
-	PORT2.PDR.BIT.B6   = 1;	 //弌椡TXD1  
-	PORT3.PDR.BIT.B0   = 0;  //擖椡RXD1
+	PORT2.PDR.BIT.B6   = 1;	 //出力TXD1  
+	PORT3.PDR.BIT.B0   = 0;  //入力RXD1
 	
-	PORT2.PMR.BIT.B6   = 0;	 //捠梡model
-	PORT3.PMR.BIT.B0   = 0;	 //捠梡model
+	PORT2.PMR.BIT.B6   = 0;	 //通用model
+	PORT3.PMR.BIT.B0   = 0;	 //通用model
 		
-	MPC.PWPR.BIT.B0WI  = 0;  //0彂偒崬傒嫋壜丂1彂偒崬傒嬛巭
-	MPC.PWPR.BIT.PFSWE = 1;  //0彂偒崬傒嬛巭丂1彂偒崬傒嫋壜
+	MPC.PWPR.BIT.B0WI  = 0;  //0書き込み許可　1書き込み禁止
+	MPC.PWPR.BIT.PFSWE = 1;  //0書き込み禁止　1書き込み許可
 	
 	MPC.P26PFS.BYTE=0x0A;    //PSEL These bits select the peripheral function. For individual pin functions
 	MPC.P30PFS.BYTE=0x0A;    //PSEL These bits select the peripheral function. For individual pin functions
 	
-	MPC.PWPR.BIT.PFSWE = 0;  //0彂偒崬傒嬛巭丂1彂偒崬傒嫋壜
-	MPC.PWPR.BIT.B0WI  = 1;  //0彂偒崬傒嫋壜丂1彂偒崬傒嬛巭
+	MPC.PWPR.BIT.PFSWE = 0;  //0書き込み禁止　1書き込み許可
+	MPC.PWPR.BIT.B0WI  = 1;  //0書き込み許可　1書き込み禁止
 	
 	PORT2.PMR.BIT.B6   = 1;	 //Use pin as I/O port for peripheral functions
 	PORT3.PMR.BIT.B0   = 1;	 //Use pin as I/O port for peripheral functions
@@ -668,6 +668,7 @@ void Intial_SCI1_Serial_Interface()
 	ICU.IER[0x1B].BIT.IEN4=1;  //transmit interrupt request enable
 	ICU.IER[0x1B].BIT.IEN5=1;  //TEIE interrupt request enable
 }
+
 //
 /***********************************************************************/
 /*                                                                     */
@@ -821,7 +822,7 @@ void Excep_S12AD0_S12ADI0(void)
 {
 
 
-	//addata=S12AD.ADTSDR;//壏搙僙儞僒偺寢壥傪撉傒弌偟
+	//addata=S12AD.ADTSDR;//温度センサの結果を読み出し
 	
 	
 }
