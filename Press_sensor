@@ -8,7 +8,7 @@
 char VRCR_BYTE;
 unsigned short addata=0;
 unsigned int time=0;
-int b=0;//拞抐偺拞偱敪憲偟偨夞悢
+int b=0;//日本語
 int t2=0;//僨僕僞儖僠儏乕僽偺敪憲偟偨夞悢
 int t;//栚壓SPI偱偳偺僨僕僞儖僠儏乕僽偵敪憲偟偨僼儔僌
 
